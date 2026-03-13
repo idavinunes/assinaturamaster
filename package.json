@@ -1,17 +1,38 @@
 {
-  "name": "app",
+  "name": "assinaura-contrato-app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "start:tunnel": "next start --hostname 127.0.0.1 --port 300",
+    "lint": "eslint",
+    "test": "node --test --experimental-strip-types test/**/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "ops:backup": "bash scripts/server-migration.sh backup",
+    "ops:restore": "bash scripts/server-migration.sh restore",
+    "ops:prepare": "bash scripts/server-migration.sh prepare",
+    "ops:smoke": "bash scripts/server-migration.sh smoke",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "node prisma/seed.mjs"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.2",
+    "bcryptjs": "^3.0.3",
+    "clsx": "^2.1.1",
+    "docxtemplater": "^3.68.3",
+    "dotenv": "^17.3.1",
+    "jose": "^6.2.1",
+    "lucide-react": "^0.577.0",
+    "mammoth": "^1.11.0",
     "next": "16.1.6",
+    "pdf-lib": "^1.17.1",
+    "pizzip": "^3.2.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -20,6 +41,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "prisma": "^6.19.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

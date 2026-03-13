@@ -1,0 +1,386 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  OPERATOR
+  VIEWER
+}
+
+enum TeamMemberRole {
+  ADMIN
+  MANAGER
+  OPERATOR
+  VIEWER
+}
+
+enum TemplateStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum TemplateScope {
+  GLOBAL
+  TEAM_PRIVATE
+}
+
+enum ServiceCatalogScope {
+  GLOBAL
+  TEAM_PRIVATE
+}
+
+enum SignatureRequestStatus {
+  DRAFT
+  SENT
+  OPENED
+  SIGNED
+  EXPIRED
+  CANCELED
+}
+
+enum StorageProvider {
+  LOCAL
+  S3
+}
+
+enum EvidenceSource {
+  WEB_LINK
+  ADMIN_PANEL
+}
+
+enum AuditActorType {
+  USER
+  SIGNER
+  SYSTEM
+}
+
+enum ClientType {
+  PERSONAL
+  BUSINESS
+}
+
+enum ClientDocumentType {
+  PRIMARY_DOCUMENT
+  RG
+  ADDRESS_PROOF
+  OTHER
+}
+
+model User {
+  id                 String               @id @default(cuid())
+  name               String
+  email              String               @unique
+  passwordHash       String
+  role               Role                 @default(OPERATOR)
+  isActive           Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  createdRequests    SignatureRequest[]   @relation("SignatureRequestCreatedBy")
+  auditEvents        AuditEvent[]         @relation("AuditActorUser")
+  teamMemberships    UserTeamMembership[]
+  responsibleClients Client[]             @relation("ClientResponsibleUser")
+  responsibleExecutedServices ClientService[] @relation("ClientServiceResponsibleUser")
+  responsibleSignatureRequests SignatureRequest[] @relation("SignatureRequestResponsibleUser")
+}
+
+model Team {
+  id          String               @id @default(cuid())
+  name        String
+  slug        String               @unique
+  description String?              @db.Text
+  isActive    Boolean              @default(true)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  memberships UserTeamMembership[]
+  brandingSettings TeamBrandingSettings?
+  clients     Client[]
+  executedServices ClientService[]
+  signatureRequests SignatureRequest[]
+  signedDocuments SignedDocument[]
+  auditEvents AuditEvent[]
+  ownedTemplates ContractTemplate[] @relation("OwnedTeamTemplates")
+  ownedServiceCatalogs ServiceCatalog[] @relation("OwnedTeamServiceCatalogs")
+  clientDocuments ClientDocument[]
+
+  @@index([name])
+}
+
+model UserTeamMembership {
+  id        String         @id @default(cuid())
+  userId    String
+  teamId    String
+  role      TeamMemberRole
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  user      User           @relation(fields: [userId], references: [id])
+  team      Team           @relation(fields: [teamId], references: [id])
+
+  @@unique([userId, teamId])
+  @@index([teamId, role])
+  @@index([userId, isActive])
+}
+
+model Client {
+  id                String             @id @default(cuid())
+  teamId            String
+  responsibleUserId String?
+  clientType        ClientType         @default(BUSINESS)
+  legalName         String?
+  documentNumber    String?
+  contactName       String?
+  civilStatus       String?
+  rg                String?
+  email             String?
+  phone             String?
+  address           String?            @db.Text
+  notes             String?            @db.Text
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  team              Team               @relation(fields: [teamId], references: [id])
+  responsibleUser   User?              @relation("ClientResponsibleUser", fields: [responsibleUserId], references: [id])
+  executedServices  ClientService[]
+  signatureRequests SignatureRequest[]
+  documents         ClientDocument[]
+
+  @@unique([teamId, documentNumber])
+  @@index([teamId, updatedAt])
+  @@index([teamId, responsibleUserId])
+  @@index([teamId, legalName])
+}
+
+model ClientDocument {
+  id              String             @id @default(cuid())
+  clientId        String
+  teamId          String
+  documentType    ClientDocumentType
+  description     String?            @db.Text
+  fileName        String
+  mimeType        String
+  storageProvider StorageProvider    @default(LOCAL)
+  storagePath     String
+  sizeBytes       Int
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  client          Client             @relation(fields: [clientId], references: [id])
+  team            Team               @relation(fields: [teamId], references: [id])
+
+  @@index([clientId, createdAt])
+  @@index([teamId, documentType])
+  @@index([teamId, createdAt])
+}
+
+model ContractTemplate {
+  id                String             @id @default(cuid())
+  scope             TemplateScope      @default(GLOBAL)
+  ownerTeamId       String?
+  name              String
+  description       String?            @db.Text
+  version           Int                @default(1)
+  body              String             @db.Text
+  variableSchema    String?            @db.Text
+  sourceFileName    String?
+  sourceMimeType    String?
+  sourceStoragePath String?
+  status            TemplateStatus     @default(DRAFT)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  ownerTeam         Team?              @relation("OwnedTeamTemplates", fields: [ownerTeamId], references: [id])
+  signatureRequests SignatureRequest[]
+
+  @@unique([ownerTeamId, name, version])
+  @@index([scope, updatedAt])
+  @@index([ownerTeamId, updatedAt])
+}
+
+model SignatureRequest {
+  id             String                 @id @default(cuid())
+  publicToken    String                 @unique @default(uuid())
+  teamId         String
+  responsibleUserId String?
+  title          String
+  signerName     String
+  signerEmail    String
+  signerDocument String?
+  signerPhone    String?
+  status         SignatureRequestStatus @default(DRAFT)
+  expiresAt      DateTime?
+  sentAt         DateTime?
+  openedAt       DateTime?
+  signedAt       DateTime?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  clientId       String
+  serviceId      String?
+  templateId     String
+  createdById    String
+  team           Team                   @relation(fields: [teamId], references: [id])
+  responsibleUser User?                 @relation("SignatureRequestResponsibleUser", fields: [responsibleUserId], references: [id])
+  client         Client                 @relation(fields: [clientId], references: [id])
+  service        ClientService?         @relation(fields: [serviceId], references: [id])
+  template       ContractTemplate       @relation(fields: [templateId], references: [id])
+  createdBy      User                   @relation("SignatureRequestCreatedBy", fields: [createdById], references: [id])
+  evidence       SignatureEvidence?
+  signedDocument SignedDocument?
+  auditEvents    AuditEvent[]
+
+  @@index([teamId, status])
+  @@index([teamId, updatedAt])
+  @@index([teamId, responsibleUserId])
+  @@index([clientId, status])
+  @@index([serviceId])
+  @@index([templateId])
+  @@index([createdById])
+}
+
+model ServiceCatalog {
+  id                String              @id @default(cuid())
+  scope             ServiceCatalogScope @default(GLOBAL)
+  ownerTeamId       String?
+  name              String
+  description       String?             @db.Text
+  defaultAmount     Decimal             @db.Decimal(12, 2)
+  defaultPercentage Decimal             @default(100) @db.Decimal(5, 2)
+  isActive          Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  ownerTeam         Team?               @relation("OwnedTeamServiceCatalogs", fields: [ownerTeamId], references: [id], onDelete: Restrict)
+  executedServices  ClientService[]
+
+  @@unique([ownerTeamId, name])
+  @@index([scope, updatedAt])
+  @@index([ownerTeamId, updatedAt])
+  @@index([name])
+}
+
+model ClientService {
+  id                   String             @id @default(cuid())
+  clientId             String
+  teamId               String
+  responsibleUserId    String?
+  serviceCatalogId     String
+  identificationNumber String?
+  description          String?            @db.Text
+  eventAmount          Decimal            @default(0) @db.Decimal(12, 2)
+  servicePercentage    Decimal            @default(100) @db.Decimal(5, 2)
+  amount               Decimal            @db.Decimal(12, 2)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  client               Client             @relation(fields: [clientId], references: [id])
+  team                 Team               @relation(fields: [teamId], references: [id])
+  responsibleUser      User?              @relation("ClientServiceResponsibleUser", fields: [responsibleUserId], references: [id])
+  serviceCatalog       ServiceCatalog     @relation(fields: [serviceCatalogId], references: [id])
+  signatureRequests    SignatureRequest[]
+
+  @@index([teamId, createdAt])
+  @@index([teamId, updatedAt])
+  @@index([teamId, responsibleUserId])
+  @@index([clientId, createdAt])
+  @@index([serviceCatalogId])
+  @@index([identificationNumber])
+}
+
+model SignatureEvidence {
+  id                 String           @id @default(cuid())
+  signatureRequestId String           @unique
+  ipAddress          String
+  userAgent          String?
+  latitude           Decimal?         @db.Decimal(10, 7)
+  longitude          Decimal?         @db.Decimal(10, 7)
+  gpsAccuracyMeters  Decimal?         @db.Decimal(8, 2)
+  locationAddress    String?          @db.Text
+  selfiePath         String?
+  selfieMimeType     String?
+  selfieCapturedAt   DateTime?
+  signatureDrawnPath String?
+  signatureDrawnMimeType String?
+  termsAccepted      Boolean          @default(false)
+  termsVersion       String?
+  signedAtBrowser    DateTime?
+  source             EvidenceSource   @default(WEB_LINK)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  signatureRequest   SignatureRequest @relation(fields: [signatureRequestId], references: [id])
+}
+
+model SignedDocument {
+  id                 String           @id @default(cuid())
+  signatureRequestId String           @unique
+  teamId             String
+  fileName           String
+  mimeType           String           @default("application/pdf")
+  storageProvider    StorageProvider  @default(LOCAL)
+  storagePath        String
+  sha256             String?
+  sizeBytes          Int?
+  generatedAt        DateTime         @default(now())
+  createdAt          DateTime         @default(now())
+  team               Team             @relation(fields: [teamId], references: [id])
+  signatureRequest   SignatureRequest @relation(fields: [signatureRequestId], references: [id])
+
+  @@index([teamId, generatedAt])
+}
+
+model BrandingSettings {
+  id                 String   @id @default(cuid())
+  singletonKey       String   @unique @default("default")
+  productName        String   @default("Assinaura Contrato")
+  productShortName   String   @default("Assinaura")
+  productTagline     String   @default("Assinatura e evidencia")
+  logoPath           String   @default("/brand-logo.svg")
+  browserTitle       String   @default("Assinaura Contrato")
+  browserDescription String   @default("MVP para formalizacao de documentos com selfie, GPS, IP, trilha de auditoria e PDF assinado.") @db.Text
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model TeamBrandingSettings {
+  id                 String   @id @default(cuid())
+  teamId             String   @unique
+  productName        String?
+  productShortName   String?
+  productTagline     String?
+  logoPath           String?
+  browserTitle       String?
+  browserDescription String?  @db.Text
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  team               Team     @relation(fields: [teamId], references: [id])
+}
+
+model AuditEvent {
+  id                 String            @id @default(cuid())
+  action             String
+  description        String?
+  actorType          AuditActorType    @default(USER)
+  ipAddress          String?
+  userAgent          String?
+  payload            String?           @db.Text
+  createdAt          DateTime          @default(now())
+  teamId             String?
+  signatureRequestId String?
+  actorUserId        String?
+  team               Team?             @relation(fields: [teamId], references: [id])
+  signatureRequest   SignatureRequest? @relation(fields: [signatureRequestId], references: [id])
+  actorUser          User?             @relation("AuditActorUser", fields: [actorUserId], references: [id])
+
+  @@index([teamId, createdAt])
+  @@index([signatureRequestId, createdAt])
+  @@index([actorUserId, createdAt])
+}
