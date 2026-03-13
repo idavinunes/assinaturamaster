@@ -23,6 +23,8 @@ Pode subir sem backup apenas em um destes casos:
 
 Se o objetivo e trocar de servidor mantendo operacao, o backup nao e opcional.
 
+Para o seu cenario atual, de primeiro deploy em ambiente novo, pule backup/restore e siga `docs/server-deploy-ubuntu.md`.
+
 ## O que precisa migrar
 
 Os dados persistidos do projeto estao em dois blocos:

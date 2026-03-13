@@ -20,6 +20,19 @@ Se o seu servidor nao for Ubuntu/Debian, ajuste apenas a etapa de instalacao do 
 
 Isso elimina a necessidade de Nginx neste projeto.
 
+## Fluxo recomendado para o seu caso
+
+Como o servidor sera novo e voce nao vai restaurar backup, o fluxo principal fica assim:
+
+1. instalar Docker/Compose
+2. clonar o repositório
+3. configurar `.env`
+4. subir o PostgreSQL com `docker compose up -d`
+5. rodar `bash scripts/server-migration.sh prepare`
+6. rodar `npm run db:seed`
+7. subir a aplicacao com `npm run start:tunnel`
+8. apontar o Cloudflare Tunnel para `http://127.0.0.1:300`
+
 ## 1. Preparar o servidor
 
 Atualize os pacotes base:
@@ -144,36 +157,27 @@ Teste se o container ficou saudavel:
 docker compose logs postgres --tail=50
 ```
 
-## 6. Restaurar backup ou iniciar vazio
+## 6. Inicializar os dados
 
-### Opcao A: migracao com dados existentes
+### Opcao principal: ambiente novo, sem backup
 
-Se voce trouxe um backup do servidor antigo:
-
-```bash
-bash scripts/server-migration.sh restore /caminho/para/o/backup
-```
-
-### Opcao B: ambiente limpo
-
-Se for um ambiente novo, sem restore:
-
-```bash
-npm ci
-npm run db:generate
-npx prisma migrate deploy
-npm run db:seed
-```
-
-## 7. Preparar a aplicacao
-
-Mesmo quando houver restore, rode:
+Se o servidor vai nascer limpo, sem restore:
 
 ```bash
 bash scripts/server-migration.sh prepare
+npm run db:seed
 ```
 
-## 8. Subir a aplicacao localmente para o Tunnel
+### Opcao alternativa: migracao com dados existentes
+
+Se no futuro voce for restaurar um backup:
+
+```bash
+bash scripts/server-migration.sh restore /caminho/para/o/backup
+bash scripts/server-migration.sh prepare
+```
+
+## 7. Subir a aplicacao localmente para o Tunnel
 
 ```bash
 npm run start:tunnel
@@ -185,7 +189,7 @@ Esse comando publica o app apenas em:
 127.0.0.1:300
 ```
 
-## 9. Apontar o Cloudflare Tunnel
+## 8. Apontar o Cloudflare Tunnel
 
 No Cloudflare Tunnel, aponte o servico HTTP para:
 
@@ -195,7 +199,7 @@ http://127.0.0.1:300
 
 Nao aponte para `localhost:3000`, porque o projeto foi preparado para subir em `127.0.0.1:300` no servidor.
 
-## 10. Validacao final
+## 9. Validacao final
 
 Depois que o Tunnel estiver ativo:
 
@@ -211,7 +215,7 @@ Valide tambem manualmente:
 - upload/download de documento de cliente
 - ONLYOFFICE, se estiver habilitado
 
-## 11. Atualizar o projeto depois
+## 10. Atualizar o projeto depois
 
 Quando houver novas alteracoes no GitHub:
 
@@ -222,7 +226,7 @@ bash scripts/server-migration.sh prepare
 
 Se houver mudanca de schema, o `prepare` ja aplica `prisma migrate deploy`.
 
-## 12. Comandos uteis
+## 11. Comandos uteis
 
 Ver o banco:
 
