@@ -93,6 +93,8 @@ O repositório agora inclui `scripts/server-migration.sh` com quatro comandos:
 - `prepare`: roda `npm ci`, Prisma e build de producao
 - `smoke`: valida a URL configurada em `APP_URL`
 
+Para bootstrap completo de um servidor Ubuntu com Docker e Cloudflare Tunnel, veja `docs/server-deploy-ubuntu.md`.
+
 ## Runbook recomendado
 
 ### 1. Congelar a origem

@@ -59,6 +59,8 @@ O backup so pode ser omitido se o servidor novo for subir vazio, sem reaproveita
 
 Existe um runbook pronto em `docs/server-migration.md` e um script operacional em `scripts/server-migration.sh`.
 
+Para subir em servidor Ubuntu com PostgreSQL em Docker e Cloudflare Tunnel, veja `docs/server-deploy-ubuntu.md`.
+
 Se o deploy for via Cloudflare Tunnel, voce pode subir a aplicacao local no servidor com:
 
 ```bash
