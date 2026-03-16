@@ -15,8 +15,9 @@ Se o seu servidor nao for Ubuntu/Debian, ajuste apenas a etapa de instalacao do 
 ## Arquitetura recomendada
 
 - `docker compose up -d` para o PostgreSQL
-- `npm run start:tunnel` para a aplicacao
-- Cloudflare Tunnel apontando para `http://127.0.0.1:300`
+- `npm run start:tunnel` para a aplicacao quando o Tunnel roda no mesmo servidor
+- `npm run start:lan` para a aplicacao quando o Tunnel roda em outra maquina da rede
+- Cloudflare Tunnel apontando para `http://127.0.0.1:300` ou `http://IP-LOCAL:300`, conforme o caso
 
 Isso elimina a necessidade de Nginx neste projeto.
 
@@ -55,6 +56,7 @@ Observacoes:
 - o comando `system` instala `Node.js 22`, `Docker Engine`, `Docker Compose` e `postgresql-client`
 - o comando `app` valida o `.env`, sobe o PostgreSQL com Compose e executa `bash scripts/server-migration.sh prepare`
 - se o script adicionar seu usuario ao grupo `docker`, faca logout/login antes de usar Docker sem `sudo`
+- para instalar a aplicacao como servico persistente, use `bash scripts/install-systemd-service.sh`
 
 ## 1. Preparar o servidor
 
@@ -212,6 +214,14 @@ Esse comando publica o app apenas em:
 127.0.0.1:300
 ```
 
+Se o Cloudflare Tunnel estiver em outro equipamento da rede local e este servidor precisar responder pelo proprio IP, use:
+
+```bash
+npm run start:lan
+```
+
+Nesse caso, a aplicacao escuta em `0.0.0.0:300`, por exemplo `http://192.168.10.100:300`.
+
 ## 8. Apontar o Cloudflare Tunnel
 
 No Cloudflare Tunnel, aponte o servico HTTP para:
@@ -221,6 +231,37 @@ http://127.0.0.1:300
 ```
 
 Nao aponte para `localhost:3000`, porque o projeto foi preparado para subir em `127.0.0.1:300` no servidor.
+
+Se o Tunnel estiver em outra maquina da rede, aponte para:
+
+```text
+http://192.168.10.100:300
+```
+
+substituindo pelo IP local real do servidor.
+
+## 8.1 Instalar como servico systemd
+
+Para nao depender de um terminal aberto, instale o servico:
+
+```bash
+bash scripts/install-systemd-service.sh --user root
+```
+
+O script cria ou atualiza `/etc/systemd/system/assinaura.service`, habilita o servico no boot e reinicia a aplicacao.
+
+Se voce estiver usando um usuario nao root para executar a app, troque o parametro:
+
+```bash
+bash scripts/install-systemd-service.sh --user seu_usuario
+```
+
+Comandos uteis depois:
+
+```bash
+systemctl status assinaura --no-pager
+journalctl -u assinaura -f
+```
 
 ## 9. Validacao final
 

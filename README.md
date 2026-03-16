@@ -62,6 +62,7 @@ Existe um runbook pronto em `docs/server-migration.md` e um script operacional e
 Para subir em servidor Ubuntu com PostgreSQL em Docker e Cloudflare Tunnel, veja `docs/server-deploy-ubuntu.md`.
 Para primeiro deploy em ambiente novo, sem backup e sem restore, siga esse guia e rode `bash scripts/server-migration.sh prepare` + `npm run db:seed`.
 Se quiser automatizar a preparacao do servidor Ubuntu, use `bash scripts/bootstrap-ubuntu-server.sh system` e depois `bash scripts/bootstrap-ubuntu-server.sh app --seed`.
+Para instalar um servico `systemd` da aplicacao, use `bash scripts/install-systemd-service.sh`.
 
 Se o deploy for via Cloudflare Tunnel, voce pode subir a aplicacao local no servidor com:
 
@@ -70,6 +71,14 @@ npm run start:tunnel
 ```
 
 Nesse caso, deixe o `APP_URL` com a URL publica final do dominio/tunnel, nao com `localhost`.
+
+Se o Tunnel estiver em outra maquina da rede e este servidor precisar expor a aplicacao via IP local, use:
+
+```bash
+npm run start:lan
+```
+
+Isso publica a aplicacao em `0.0.0.0:300`, por exemplo `http://192.168.10.100:300`.
 
 ## ONLYOFFICE Docs
 
