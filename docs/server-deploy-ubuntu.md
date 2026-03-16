@@ -33,6 +33,29 @@ Como o servidor sera novo e voce nao vai restaurar backup, o fluxo principal fic
 7. subir a aplicacao com `npm run start:tunnel`
 8. apontar o Cloudflare Tunnel para `http://127.0.0.1:300`
 
+## Atalho com script
+
+O repositorio agora inclui `scripts/bootstrap-ubuntu-server.sh` para reduzir o trabalho manual no Ubuntu.
+
+Fluxo sugerido:
+
+1. clonar o repositorio
+2. rodar `bash scripts/bootstrap-ubuntu-server.sh system`
+3. revisar o `.env`
+4. rodar `bash scripts/bootstrap-ubuntu-server.sh app --seed`
+
+Se o `.env` ja estiver pronto antes, tambem pode executar tudo de uma vez:
+
+```bash
+bash scripts/bootstrap-ubuntu-server.sh all --seed
+```
+
+Observacoes:
+
+- o comando `system` instala `Node.js 22`, `Docker Engine`, `Docker Compose` e `postgresql-client`
+- o comando `app` valida o `.env`, sobe o PostgreSQL com Compose e executa `bash scripts/server-migration.sh prepare`
+- se o script adicionar seu usuario ao grupo `docker`, faca logout/login antes de usar Docker sem `sudo`
+
 ## 1. Preparar o servidor
 
 Atualize os pacotes base:
