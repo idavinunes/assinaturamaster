@@ -30,7 +30,11 @@ export default async function NewSignatureRequestPage() {
       },
     }),
     prisma.clientService.findMany({
-      where: buildClientServiceScopeWhere(access),
+      where: buildClientServiceScopeWhere(access, {
+        signatureRequests: {
+          none: {},
+        },
+      }),
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       select: {
         id: true,
@@ -78,7 +82,8 @@ export default async function NewSignatureRequestPage() {
       </h1>
       <p className="mt-3 max-w-3xl text-sm leading-6 text-muted">
         Gere o link publico escolhendo cliente, servico executado, modelo e os
-        dados do assinante.
+        dados do assinante. Cada servico executado pode alimentar apenas uma
+        solicitacao de assinatura.
       </p>
 
       <div className="mt-8 rounded-[28px] bg-white/70 p-6">

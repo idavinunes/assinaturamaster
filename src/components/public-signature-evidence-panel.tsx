@@ -3,6 +3,7 @@
 import {
   Camera,
   CheckCircle2,
+  ExternalLink,
   LoaderCircle,
   MapPinned,
   PenLine,
@@ -25,6 +26,8 @@ type PublicSignatureEvidencePanelProps = {
   signerName: string;
   requestTitle: string;
   requestStatus: RequestStatus;
+  previewUrl?: string | null;
+  signedDocumentUrl?: string | null;
   captureDisabled?: boolean;
   initialEvidence?: {
     ipAddress: string;
@@ -63,6 +66,7 @@ type FinalizePayload = {
   status?: RequestStatus;
   signedAt?: string;
   signatureUrl?: string;
+  signedDocumentUrl?: string;
   error?: string;
 };
 
@@ -147,6 +151,8 @@ export function PublicSignatureEvidencePanel({
   signerName,
   requestTitle,
   requestStatus,
+  previewUrl = null,
+  signedDocumentUrl = null,
   captureDisabled = false,
   initialEvidence = null,
 }: PublicSignatureEvidencePanelProps) {
@@ -196,10 +202,14 @@ export function PublicSignatureEvidencePanel({
   const [signedAtBrowser, setSignedAtBrowser] = useState<string | null>(
     initialEvidence?.signedAtBrowser ?? null,
   );
+  const [completedSignedDocumentUrl, setCompletedSignedDocumentUrl] = useState<string | null>(
+    signedDocumentUrl,
+  );
   const [finalizePending, setFinalizePending] = useState(false);
 
   const isSigned = requestStatus === "SIGNED" || signedAtBrowser !== null;
   const isBlocked = requestStatus === "EXPIRED" || requestStatus === "CANCELED";
+  const activeSignedDocumentUrl = completedSignedDocumentUrl ?? signedDocumentUrl;
   const canFinalize =
     signatureHasDrawn &&
     Boolean(location) &&
@@ -707,6 +717,7 @@ export function PublicSignatureEvidencePanel({
       }
 
       setSignedAtBrowser(payload.signedAt ?? new Date().toISOString());
+      setCompletedSignedDocumentUrl(payload.signedDocumentUrl ?? signedDocumentUrl);
       stopCameraStream();
       setSigningStep("done");
     } catch (error) {
@@ -770,6 +781,33 @@ export function PublicSignatureEvidencePanel({
       {isBlocked ? (
         <div className="rounded-[28px] border border-stone-300 bg-stone-100 px-5 py-5 text-sm text-stone-700">
           Este link esta bloqueado para nova assinatura.
+        </div>
+      ) : null}
+
+      {previewUrl && !isSigned ? (
+        <div className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="eyebrow text-slate-400">Leitura opcional</p>
+              <p className="mt-2 text-lg font-semibold text-slate-900">
+                Quer revisar o contrato antes de assinar?
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Abra a previa em modo leitura, confira o texto e volte para continuar a
+                assinatura normalmente.
+              </p>
+            </div>
+
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              <ExternalLink className="size-4" />
+              Ver previa do contrato
+            </a>
+          </div>
         </div>
       ) : null}
 
@@ -1142,6 +1180,19 @@ export function PublicSignatureEvidencePanel({
             <p className="mt-3 text-sm text-emerald-700">
               Finalizada em {new Date(signedAtBrowser).toLocaleString("pt-BR")}
             </p>
+          ) : null}
+          {activeSignedDocumentUrl ? (
+            <div className="mt-6">
+              <a
+                href={activeSignedDocumentUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="button-primary"
+              >
+                <ExternalLink className="size-5" />
+                Ver PDF assinado
+              </a>
+            </div>
           ) : null}
         </div>
       ) : null}

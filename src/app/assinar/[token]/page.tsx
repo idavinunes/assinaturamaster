@@ -6,6 +6,8 @@ import { PublicSignatureEvidencePanel } from "@/components/public-signature-evid
 import { getResolvedBrandingSettings } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 import {
+  buildPublicSignedDocumentPath,
+  buildPublicSignaturePreviewPath,
   buildPublicSignatureDrawnSignaturePath,
   buildPublicSignatureSelfiePath,
   signatureRequestStatusLabels,
@@ -94,6 +96,11 @@ export default async function PublicSignaturePage({
           updatedAt: true,
         },
       },
+      signedDocument: {
+        select: {
+          id: true,
+        },
+      },
     },
   });
 
@@ -101,11 +108,12 @@ export default async function PublicSignaturePage({
     notFound();
   }
 
-  if (request.status === "SIGNED") {
-    notFound();
-  }
-
   const branding = await getResolvedBrandingSettings(request.teamId);
+  const previewUrl = buildPublicSignaturePreviewPath(request.publicToken);
+  const signedDocumentUrl =
+    request.status === "SIGNED" && request.signedDocument
+      ? buildPublicSignedDocumentPath(request.publicToken)
+      : null;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 md:px-6 md:py-10">
@@ -121,13 +129,16 @@ export default async function PublicSignaturePage({
           {request.title}
         </h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
-          Siga as etapas para validar sua identidade e concluir a assinatura deste documento.
+          {request.status === "SIGNED"
+            ? "Este link esta em modo consulta. O documento ja foi assinado e o PDF final segue disponivel."
+            : "Siga as etapas para validar sua identidade e concluir a assinatura deste documento."}
         </p>
 
         <div className="mt-6 flex flex-wrap gap-3">
           <span
             className={clsx(
               "inline-flex rounded-full px-3 py-1 text-xs font-medium",
+              request.status === "SIGNED" && "bg-emerald-50 text-emerald-700",
               request.status === "OPENED" && "bg-sky-50 text-sky-700",
               request.status === "SENT" && "bg-amber-50 text-amber-700",
               request.status === "DRAFT" && "bg-slate-100 text-slate-700",
@@ -168,6 +179,8 @@ export default async function PublicSignaturePage({
             signerName={request.signerName}
             requestTitle={request.title}
             requestStatus={request.status}
+            previewUrl={previewUrl}
+            signedDocumentUrl={signedDocumentUrl}
             captureDisabled={
               request.status === "EXPIRED" ||
               request.status === "CANCELED"

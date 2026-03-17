@@ -33,57 +33,62 @@ export default async function EditSignatureRequestPage({
   const session = await requireOperationalWriteAccess();
   const { id } = await params;
 
-  const [request, clients, executedServices, templates] = await Promise.all([
-    prisma.signatureRequest.findFirst({
-      where: buildSignatureRequestScopeWhere(session, { id }),
-      include: {
-        client: {
-          select: {
-            clientType: true,
-            legalName: true,
-            documentNumber: true,
-            contactName: true,
-            email: true,
-            phone: true,
-            address: true,
-            notes: true,
-          },
+  const request = await prisma.signatureRequest.findFirst({
+    where: buildSignatureRequestScopeWhere(session, { id }),
+    include: {
+      client: {
+        select: {
+          clientType: true,
+          legalName: true,
+          documentNumber: true,
+          contactName: true,
+          email: true,
+          phone: true,
+          address: true,
+          notes: true,
         },
-        service: {
-          select: {
-            id: true,
-            identificationNumber: true,
-            description: true,
-            eventAmount: true,
-            servicePercentage: true,
-            amount: true,
-            createdAt: true,
-            serviceCatalog: {
-              select: {
-                name: true,
-              },
+      },
+      service: {
+        select: {
+          id: true,
+          identificationNumber: true,
+          description: true,
+          eventAmount: true,
+          servicePercentage: true,
+          amount: true,
+          createdAt: true,
+          serviceCatalog: {
+            select: {
+              name: true,
             },
           },
         },
-        template: {
-          select: {
-            id: true,
-            name: true,
-            version: true,
-            body: true,
-            sourceFileName: true,
-            sourceStoragePath: true,
-          },
-        },
-        signedDocument: {
-          select: {
-            id: true,
-            generatedAt: true,
-            sizeBytes: true,
-          },
+      },
+      template: {
+        select: {
+          id: true,
+          name: true,
+          version: true,
+          body: true,
+          sourceFileName: true,
+          sourceStoragePath: true,
         },
       },
-    }),
+      signedDocument: {
+        select: {
+          id: true,
+          generatedAt: true,
+          sizeBytes: true,
+        },
+      },
+    },
+  });
+
+  if (!request) {
+    notFound();
+  }
+
+  const [clients, executedServices, templates] = await Promise.all([
     prisma.client.findMany({
       where: buildClientScopeWhere(session),
       orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
@@ -99,7 +104,22 @@ export default async function EditSignatureRequestPage({
       },
     }),
     prisma.clientService.findMany({
-      where: buildClientServiceScopeWhere(session),
+      where: buildClientServiceScopeWhere(session, {
+        OR: [
+          {
+            id: request.serviceId ?? "__keep_current_service__",
+          },
+          {
+            signatureRequests: {
+              none: {
+                id: {
+                  not: request.id,
+                },
+              },
+            },
+          },
+        ],
+      }),
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       select: {
         id: true,
@@ -136,10 +156,6 @@ export default async function EditSignatureRequestPage({
       },
     }),
   ]);
-
-  if (!request) {
-    notFound();
-  }
 
   const editableStatus =
     request.status === "OPENED" || request.status === "SIGNED" || request.status === "EXPIRED"
@@ -268,7 +284,7 @@ export default async function EditSignatureRequestPage({
           </section>
         ) : (
           <section className="rounded-[28px] border border-emerald-200 bg-emerald-50 px-6 py-5 text-sm leading-6 text-emerald-800 shadow-sm">
-            O link publico foi encerrado automaticamente apos a assinatura e nao aceita mais alteracoes.
+            O link publico entrou em modo consulta apos a assinatura. Novas alteracoes seguem bloqueadas, mas o PDF final continua disponivel para visualizacao.
           </section>
         )}
 
@@ -276,7 +292,7 @@ export default async function EditSignatureRequestPage({
           <p className="eyebrow text-slate-400">Acesso publico</p>
           {request.status === "SIGNED" ? (
             <p className="mt-4 text-sm leading-6 text-slate-500">
-              Este link foi encerrado automaticamente apos a assinatura.
+              Este link esta em modo consulta apos a assinatura. O signatario ainda consegue abrir o PDF final, mas nao consegue assinar novamente.
             </p>
           ) : (
             <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

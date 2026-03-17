@@ -64,8 +64,9 @@ async function validateRequestRelations(params: {
   clientId: string;
   serviceId: string;
   templateId: string;
+  currentRequestId?: string;
 }) {
-  const [client, service, template] = await Promise.all([
+  const [client, service, template, conflictingRequest] = await Promise.all([
     prisma.client.findFirst({
       where: buildClientScopeWhere(params.actor, {
         id: params.clientId,
@@ -103,6 +104,21 @@ async function validateRequestRelations(params: {
         status: true,
       },
     }),
+    prisma.signatureRequest.findFirst({
+      where: {
+        serviceId: params.serviceId,
+        ...(params.currentRequestId
+          ? {
+              id: {
+                not: params.currentRequestId,
+              },
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+      },
+    }),
   ]);
 
   if (!client) {
@@ -119,6 +135,12 @@ async function validateRequestRelations(params: {
 
   if (service.teamId !== client.teamId) {
     return { error: "Cliente e servico executado precisam pertencer a mesma equipe." };
+  }
+
+  if (conflictingRequest) {
+    return {
+      error: "Este servico executado ja esta vinculado a outra solicitacao de assinatura.",
+    };
   }
 
   if (!template) {
@@ -175,6 +197,14 @@ async function getScopedSignatureRequestForWrite(
 function getPrismaErrorMessage(error: unknown) {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     if (error.code === "P2002") {
+      const target = Array.isArray(error.meta?.target)
+        ? error.meta.target.join(",")
+        : String(error.meta?.target ?? "");
+
+      if (target.includes("serviceId")) {
+        return "Este servico executado ja esta vinculado a outra solicitacao de assinatura.";
+      }
+
       return "Ja existe uma solicitacao com esse token publico.";
     }
 
@@ -234,6 +264,12 @@ export async function createSignatureRequestAction(
     return { error: parsed.error.issues[0]?.message ?? "Dados invalidos." };
   }
 
+  const expiresAt = endOfDayFromDateInput(parsed.data.expiresAt);
+
+  if (parsed.data.expiresAt && !expiresAt) {
+    return { error: "Informe uma data de expiracao valida." };
+  }
+
   const relationValidation = await validateRequestRelations({
     actor,
     ...parsed.data,
@@ -241,12 +277,6 @@ export async function createSignatureRequestAction(
 
   if ("error" in relationValidation) {
     return { error: relationValidation.error };
-  }
-
-  const expiresAt = endOfDayFromDateInput(parsed.data.expiresAt);
-
-  if (parsed.data.expiresAt && !expiresAt) {
-    return { error: "Informe uma data de expiracao valida." };
   }
 
   let request: { id: string; title: string };
@@ -308,9 +338,20 @@ export async function updateSignatureRequestAction(
     return { error: parsed.error.issues[0]?.message ?? "Dados invalidos." };
   }
 
+  const existingRequest = await getScopedSignatureRequestForWrite(actor, requestId);
+
+  if (!existingRequest) {
+    return { error: "Solicitacao nao encontrada ou fora do seu escopo." };
+  }
+
+  if (existingRequest.status === "SIGNED") {
+    return { error: "Solicitacoes assinadas nao podem mais ser editadas." };
+  }
+
   const relationValidation = await validateRequestRelations({
     actor,
     ...parsed.data,
+    currentRequestId: requestId,
   });
 
   if ("error" in relationValidation) {
@@ -321,16 +362,6 @@ export async function updateSignatureRequestAction(
 
   if (parsed.data.expiresAt && !expiresAt) {
     return { error: "Informe uma data de expiracao valida." };
-  }
-
-  const existingRequest = await getScopedSignatureRequestForWrite(actor, requestId);
-
-  if (!existingRequest) {
-    return { error: "Solicitacao nao encontrada ou fora do seu escopo." };
-  }
-
-  if (existingRequest.status === "SIGNED") {
-    return { error: "Solicitacoes assinadas nao podem mais ser editadas." };
   }
 
   let request: { id: string; title: string };

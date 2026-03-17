@@ -28,12 +28,20 @@ export function buildPublicSignaturePath(publicToken: string) {
   return `/assinar/${publicToken}`;
 }
 
+export function buildPublicSignaturePreviewPath(publicToken: string) {
+  return `/assinar/${publicToken}/previa`;
+}
+
 export function buildPublicSignatureSelfiePath(publicToken: string) {
   return `/api/public-signature/${publicToken}/selfie`;
 }
 
 export function buildPublicSignatureDrawnSignaturePath(publicToken: string) {
   return `/api/public-signature/${publicToken}/signature-mark`;
+}
+
+export function buildPublicSignedDocumentPath(publicToken: string) {
+  return `/api/public-signature/${publicToken}/signed-document`;
 }
 
 export function buildAdminSignedDocumentPath(signatureRequestId: string) {

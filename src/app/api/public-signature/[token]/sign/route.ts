@@ -7,6 +7,7 @@ import {
 } from "@/lib/pdf/build-signed-contract-pdf";
 import {
   buildPublicSignatureDrawnSignaturePath,
+  buildPublicSignedDocumentPath,
 } from "@/lib/signature-requests";
 import {
   buildOnlyOfficeSignatureRenderedDocxUrl,
@@ -363,5 +364,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     status: "SIGNED",
     signedAt: signedAtBrowser.toISOString(),
     signatureUrl: `${buildPublicSignatureDrawnSignaturePath(token)}?v=${now.getTime()}`,
+    signedDocumentUrl: buildPublicSignedDocumentPath(token),
   });
 }

@@ -227,7 +227,7 @@ model SignatureRequest {
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
   clientId       String
-  serviceId      String?
+  serviceId      String?                @unique
   templateId     String
   createdById    String
   team           Team                   @relation(fields: [teamId], references: [id])
@@ -244,7 +244,6 @@ model SignatureRequest {
   @@index([teamId, updatedAt])
   @@index([teamId, responsibleUserId])
   @@index([clientId, status])
-  @@index([serviceId])
   @@index([templateId])
   @@index([createdById])
 }

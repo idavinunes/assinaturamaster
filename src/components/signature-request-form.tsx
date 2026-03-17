@@ -135,6 +135,11 @@ export function SignatureRequestForm({
     clientId ? service.clientId === clientId : true,
   );
   const selectedExecutedService = executedServices.find((service) => service.id === serviceId);
+  const servicePlaceholder = clientId
+    ? filteredServices.length > 0
+      ? "Selecione um servico executado"
+      : "Nenhum servico disponivel para nova assinatura"
+    : "Escolha o cliente primeiro";
 
   return (
     <form action={formAction} className="mt-6 grid gap-5">
@@ -230,7 +235,7 @@ export function SignatureRequestForm({
             required
           >
             <option value="" disabled>
-              {clientId ? "Selecione um servico executado" : "Escolha o cliente primeiro"}
+              {servicePlaceholder}
             </option>
             {filteredServices.map((service) => (
               <option key={service.id} value={service.id}>
@@ -246,6 +251,10 @@ export function SignatureRequestForm({
               Evento {formatCurrencyBRL(selectedExecutedService.eventAmount)}
               {` • ${formatPercentageBR(selectedExecutedService.servicePercentage)}`}
               {` • Prestacao ${formatCurrencyBRL(selectedExecutedService.amount)}`}
+            </p>
+          ) : clientId && filteredServices.length === 0 ? (
+            <p className="text-xs leading-5 text-muted">
+              Os servicos ja vinculados a outra assinatura nao aparecem nesta lista.
             </p>
           ) : null}
         </label>
