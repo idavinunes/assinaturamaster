@@ -10,6 +10,10 @@ import { registerUserAudit } from "@/lib/audit";
 import { BRANDING_SINGLETON_KEY } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 import {
+  deleteStoredBrandingLogo,
+  persistBrandingLogoFile,
+} from "@/lib/storage/branding-logos";
+import {
   brandingSettingsSchema,
   teamBrandingSettingsSchema,
 } from "@/lib/validation/forms";
@@ -27,6 +31,20 @@ function extractBrandingFormData(formData: FormData) {
     logoPath: String(formData.get("logoPath") ?? ""),
     browserTitle: String(formData.get("browserTitle") ?? ""),
     browserDescription: String(formData.get("browserDescription") ?? ""),
+  };
+}
+
+async function readBrandingLogoUpload(formData: FormData) {
+  const fileEntry = formData.get("logoFile");
+
+  if (!(fileEntry instanceof File) || fileEntry.size === 0) {
+    return null;
+  }
+
+  return {
+    fileName: fileEntry.name,
+    mimeType: fileEntry.type,
+    fileBytes: new Uint8Array(await fileEntry.arrayBuffer()),
   };
 }
 
@@ -60,20 +78,56 @@ export async function updateBrandingSettingsAction(
     return { error: "Voce nao possui permissao para alterar a marca global." };
   }
 
+  const [logoUpload, existingSettings] = await Promise.all([
+    readBrandingLogoUpload(formData),
+    prisma.brandingSettings.findUnique({
+      where: { singletonKey: BRANDING_SINGLETON_KEY },
+      select: { logoPath: true },
+    }),
+  ]);
   const parsed = brandingSettingsSchema.safeParse(extractBrandingFormData(formData));
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados invalidos." };
   }
 
-  await prisma.brandingSettings.upsert({
-    where: { singletonKey: BRANDING_SINGLETON_KEY },
-    update: parsed.data,
-    create: {
-      singletonKey: BRANDING_SINGLETON_KEY,
-      ...parsed.data,
-    },
-  });
+  const normalizedLogoPath = parsed.data.logoPath.trim();
+
+  if (!normalizedLogoPath && !logoUpload) {
+    return { error: "Informe o caminho/URL da logo ou envie um arquivo." };
+  }
+
+  try {
+    let logoPath = normalizedLogoPath;
+
+    if (logoUpload) {
+      const uploadedLogo = await persistBrandingLogoFile({
+        scope: "global",
+        ...logoUpload,
+        previousLogoPath: existingSettings?.logoPath,
+      });
+      logoPath = uploadedLogo.logoPath;
+    } else if (existingSettings?.logoPath && normalizedLogoPath !== existingSettings.logoPath) {
+      await deleteStoredBrandingLogo(existingSettings.logoPath);
+    }
+
+    await prisma.brandingSettings.upsert({
+      where: { singletonKey: BRANDING_SINGLETON_KEY },
+      update: {
+        ...parsed.data,
+        logoPath,
+      },
+      create: {
+        singletonKey: BRANDING_SINGLETON_KEY,
+        ...parsed.data,
+        logoPath,
+      },
+    });
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Nao foi possivel salvar a logo.",
+    };
+  }
 
   await registerUserAudit({
     actorUserId: actor.id,
@@ -96,6 +150,13 @@ export async function updateActiveTeamBrandingSettingsAction(
     return { error: "Voce nao possui permissao para alterar a marca desta equipe." };
   }
 
+  const [logoUpload, existingSettings] = await Promise.all([
+    readBrandingLogoUpload(formData),
+    prisma.teamBrandingSettings.findUnique({
+      where: { teamId: actor.activeTeamId },
+      select: { logoPath: true },
+    }),
+  ]);
   const parsed = teamBrandingSettingsSchema.safeParse(extractBrandingFormData(formData));
 
   if (!parsed.success) {
@@ -104,14 +165,32 @@ export async function updateActiveTeamBrandingSettingsAction(
 
   const data = normalizeTeamBrandingFormData(parsed.data);
 
-  await prisma.teamBrandingSettings.upsert({
-    where: { teamId: actor.activeTeamId },
-    update: data,
-    create: {
-      teamId: actor.activeTeamId,
-      ...data,
-    },
-  });
+  try {
+    if (logoUpload) {
+      const uploadedLogo = await persistBrandingLogoFile({
+        scope: "team",
+        teamId: actor.activeTeamId,
+        ...logoUpload,
+        previousLogoPath: existingSettings?.logoPath,
+      });
+      data.logoPath = uploadedLogo.logoPath;
+    } else if (existingSettings?.logoPath && data.logoPath !== existingSettings.logoPath) {
+      await deleteStoredBrandingLogo(existingSettings.logoPath);
+    }
+
+    await prisma.teamBrandingSettings.upsert({
+      where: { teamId: actor.activeTeamId },
+      update: data,
+      create: {
+        teamId: actor.activeTeamId,
+        ...data,
+      },
+    });
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Nao foi possivel salvar a logo.",
+    };
+  }
 
   await registerUserAudit({
     actorUserId: actor.id,

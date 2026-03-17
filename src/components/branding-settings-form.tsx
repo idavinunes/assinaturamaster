@@ -44,7 +44,7 @@ export function BrandingSettingsForm({
   const [state, formAction] = useActionState(action, initialState);
 
   return (
-    <form action={formAction} className="mt-6 grid gap-5">
+    <form action={formAction} encType="multipart/form-data" className="mt-6 grid gap-5">
       {allowBlankValues ? (
         <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-500">
           Deixe qualquer campo em branco para herdar o valor da configuracao global.
@@ -88,7 +88,7 @@ export function BrandingSettingsForm({
         </label>
 
         <label className="grid gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Logo (caminho ou URL)</span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Logo por caminho ou URL</span>
           <input
             name="logoPath"
             defaultValue={getFieldValue(defaults.logoPath, allowBlankValues)}
@@ -98,12 +98,32 @@ export function BrandingSettingsForm({
                 : "/brand-logo.svg"
             }
             className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500"
-            required={!allowBlankValues}
+            required={false}
           />
           <p className="text-xs leading-5 text-slate-500">
             Use um arquivo em `public`, como `/brand-logo.svg`, ou uma URL externa.
           </p>
         </label>
+      </div>
+
+      <div className="grid gap-5 md:grid-cols-2">
+        <label className="grid gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Enviar logo</span>
+          <input
+            name="logoFile"
+            type="file"
+            accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp"
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition file:mr-4 file:rounded-xl file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200 focus:border-blue-500"
+          />
+          <p className="text-xs leading-5 text-slate-500">
+            Se enviar um arquivo, ele substitui o valor informado no campo de caminho/URL.
+          </p>
+        </label>
+
+        <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-500">
+          PNG, JPG, WEBP ou SVG. O arquivo fica salvo no servidor e a aplicacao passa a usar
+          esse caminho automaticamente.
+        </div>
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">

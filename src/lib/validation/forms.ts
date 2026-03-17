@@ -123,11 +123,13 @@ export const brandingSettingsSchema = z.object({
   logoPath: z
     .string()
     .trim()
-    .min(1, "Informe o caminho ou URL da logo.")
-    .max(500, "Use no maximo 500 caracteres no caminho da logo.")
     .refine(
-      (value) => value.startsWith("/") || /^https?:\/\//.test(value),
-      "Use um caminho comecando com / ou URL http(s).",
+      (value) => value.length === 0 || value.length <= 500,
+      "Use no maximo 500 caracteres no caminho da logo.",
+    )
+    .refine(
+      (value) => value.length === 0 || value.startsWith("/") || /^https?:\/\//.test(value),
+      "Use um caminho comecando com /, uma URL http(s) ou envie um arquivo.",
     ),
   browserTitle: z
     .string()
