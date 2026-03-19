@@ -21,6 +21,7 @@ import {
 } from "@/lib/template-access";
 import {
   countTemplateVariables,
+  formatTemplateTeamAccessSummary,
   templateScopeLabels,
   templateStatusLabels,
 } from "@/lib/templates";
@@ -38,6 +39,20 @@ export default async function TemplatesPage() {
       ownerTeam: {
         select: {
           name: true,
+        },
+      },
+      teamAccesses: {
+        select: {
+          team: {
+            select: {
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          team: {
+            name: "asc",
+          },
         },
       },
       _count: {
@@ -63,7 +78,7 @@ export default async function TemplatesPage() {
           </h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-muted">
             Estruture contratos reutilizaveis com versao, variaveis dinamicas,
-            escopo global ou privado da equipe e edicao visual em DOCX/ONLYOFFICE.
+            escopo global ou restrito por equipes e edicao visual em DOCX/ONLYOFFICE.
           </p>
         </div>
 
@@ -102,7 +117,7 @@ export default async function TemplatesPage() {
             <div className="rounded-[24px] border border-line bg-white px-4 py-4">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted">
                 <Shapes className="size-4 text-accent" />
-                Da equipe
+                Restritos
               </div>
               <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
                 {privateTemplates}
@@ -134,7 +149,10 @@ export default async function TemplatesPage() {
           </div>
 
           <div className="grid gap-3 pt-3">
-            {templates.map((template) => (
+            {templates.map((template) => {
+              const visibleTeamNames = template.teamAccesses.map((accessItem) => accessItem.team.name);
+
+              return (
               <article
                 key={template.id}
                 className="grid gap-4 rounded-[24px] border border-line bg-white p-4 md:grid-cols-[1.3fr_0.7fr_0.8fr_0.95fr] md:items-center"
@@ -151,7 +169,12 @@ export default async function TemplatesPage() {
                   </p>
                   {template.scope === "TEAM_PRIVATE" ? (
                     <p className="mt-1 text-xs text-muted">
-                      Equipe: {template.ownerTeam?.name ?? "Equipe nao localizada"}
+                      Equipes:{" "}
+                      {formatTemplateTeamAccessSummary(
+                        visibleTeamNames.length > 0
+                          ? visibleTeamNames
+                          : [template.ownerTeam?.name ?? "Equipe nao localizada"],
+                      )}
                     </p>
                   ) : null}
                 </div>
@@ -226,7 +249,8 @@ export default async function TemplatesPage() {
                   )}
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         </section>
       </div>
@@ -237,10 +261,9 @@ export default async function TemplatesPage() {
           <p className="font-semibold">Permissao aplicada</p>
         </div>
         <p className="mt-2">
-          Modelos globais ficam visiveis para todas as equipes. Modelos privados
-          aparecem apenas na equipe dona. O super admin pode manter modelos
-          globais, enquanto cada equipe gerencia apenas os modelos privados do seu
-          proprio contexto. A exclusao continua restrita ao super admin.
+          Modelos globais ficam visiveis para todas as equipes. Modelos restritos
+          podem ser liberados para uma ou mais equipes especificas, mantendo uma
+          equipe dona para edicao. A exclusao continua restrita ao super admin.
         </p>
       </div>
     </div>

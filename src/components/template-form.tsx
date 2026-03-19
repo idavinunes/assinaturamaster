@@ -22,6 +22,7 @@ type TemplateFormProps = {
     variableSchemaInput?: string;
     status?: string;
     scope?: TemplateScope;
+    allowedTeamIds?: string[];
     sourceFileName?: string | null;
     sourceStoragePath?: string | null;
   };
@@ -29,6 +30,19 @@ type TemplateFormProps = {
     mode: "select" | "hidden";
     value: TemplateScope;
     options?: Array<{ value: TemplateScope; label: string }>;
+    helper?: string;
+    lockedLabel?: string;
+  };
+  allowedTeamsField?: {
+    mode: "hidden" | "multi-select";
+    ownerTeam?: {
+      id: string;
+      label: string;
+    } | null;
+    options?: Array<{
+      value: string;
+      label: string;
+    }>;
     helper?: string;
     lockedLabel?: string;
   };
@@ -41,9 +55,13 @@ export function TemplateForm({
   error,
   defaults,
   scopeField,
+  allowedTeamsField,
 }: TemplateFormProps) {
   void pendingLabel;
   const [selectedSourceFileName, setSelectedSourceFileName] = useState<string | null>(null);
+  const [selectedScope, setSelectedScope] = useState<TemplateScope>(
+    defaults?.scope ?? scopeField.value,
+  );
   const docxIsPrimarySource =
     Boolean(defaults?.sourceStoragePath) || Boolean(selectedSourceFileName);
 
@@ -99,7 +117,10 @@ export function TemplateForm({
           <span className="eyebrow text-muted">Visibilidade</span>
           <select
             name="scope"
-            defaultValue={defaults?.scope ?? scopeField.value}
+            value={selectedScope}
+            onChange={(event) => {
+              setSelectedScope(event.currentTarget.value as TemplateScope);
+            }}
             className="rounded-[22px] border border-line bg-white px-4 py-3.5 text-sm outline-none transition focus:border-accent"
             required
           >
@@ -127,6 +148,67 @@ export function TemplateForm({
           </div>
         </>
       )}
+
+      {selectedScope === "TEAM_PRIVATE" && allowedTeamsField ? (
+        allowedTeamsField.mode === "multi-select" ? (
+          <section className="rounded-[24px] border border-line bg-white/70 px-4 py-4">
+            <p className="eyebrow text-muted">Equipes autorizadas</p>
+            {allowedTeamsField.ownerTeam ? (
+              <>
+                <input
+                  type="hidden"
+                  name="allowedTeamIds"
+                  value={allowedTeamsField.ownerTeam.id}
+                />
+                <div className="mt-3 rounded-[18px] border border-line bg-white px-4 py-3">
+                  <p className="text-sm font-semibold text-foreground">
+                    Equipe dona: {allowedTeamsField.ownerTeam.label}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-muted">
+                    A equipe dona sempre continua com acesso e permissao de edicao.
+                  </p>
+                </div>
+              </>
+            ) : null}
+
+            <div className="mt-3 grid gap-3">
+              {allowedTeamsField.options?.length ? (
+                allowedTeamsField.options.map((option) => (
+                  <label
+                    key={option.value}
+                    className="flex items-start gap-3 rounded-[18px] border border-line bg-white px-4 py-3 text-sm text-foreground"
+                  >
+                    <input
+                      type="checkbox"
+                      name="allowedTeamIds"
+                      value={option.value}
+                      defaultChecked={defaults?.allowedTeamIds?.includes(option.value)}
+                      className="mt-0.5 size-4 rounded border-line text-accent focus:ring-accent"
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))
+              ) : (
+                <p className="text-sm text-muted">
+                  Nenhuma outra equipe disponivel para compartilhamento.
+                </p>
+              )}
+            </div>
+
+            {allowedTeamsField.helper ? (
+              <p className="mt-3 text-xs leading-5 text-muted">{allowedTeamsField.helper}</p>
+            ) : null}
+          </section>
+        ) : (
+          <div className="rounded-[24px] border border-line bg-white/70 px-4 py-4">
+            <p className="eyebrow text-muted">Equipes autorizadas</p>
+            <p className="mt-2 text-sm text-foreground">{allowedTeamsField.lockedLabel}</p>
+            {allowedTeamsField.helper ? (
+              <p className="mt-2 text-xs leading-5 text-muted">{allowedTeamsField.helper}</p>
+            ) : null}
+          </div>
+        )
+      ) : null}
 
       <label className="grid gap-2">
         <span className="eyebrow text-muted">Descricao</span>

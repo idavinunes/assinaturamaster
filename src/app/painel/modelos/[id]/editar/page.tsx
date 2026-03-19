@@ -13,6 +13,7 @@ import {
 } from "@/lib/template-access";
 import {
   countTemplateVariables,
+  formatTemplateTeamAccessSummary,
   stringifyTemplateVariables,
   templateScopeLabels,
   templateStatusLabels,
@@ -55,6 +56,22 @@ export default async function EditTemplatePage({
           name: true,
         },
       },
+      teamAccesses: {
+        select: {
+          teamId: true,
+          team: {
+            select: {
+              name: true,
+              isActive: true,
+            },
+          },
+        },
+        orderBy: {
+          team: {
+            name: "asc",
+          },
+        },
+      },
       _count: {
         select: {
           signatureRequests: true,
@@ -70,6 +87,18 @@ export default async function EditTemplatePage({
   if (!canEditTemplate(access, template)) {
     redirect("/painel/modelos");
   }
+
+  const canCreateGlobal = canCreateGlobalTemplates(access);
+  const teams = canCreateGlobal
+    ? await prisma.team.findMany({
+        orderBy: [{ name: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          isActive: true,
+        },
+      })
+    : [];
 
   const scopeOptions = [];
 
@@ -90,7 +119,23 @@ export default async function EditTemplatePage({
     label: templateScopeLabels.GLOBAL,
   });
 
-  const scopeField = canCreateGlobalTemplates(access)
+  const ownerTeamForEdit =
+    template.scope === "TEAM_PRIVATE" && template.ownerTeamId
+      ? {
+          id: template.ownerTeamId,
+          name: template.ownerTeam?.name ?? "Equipe dona",
+        }
+      : access.activeTeamId
+        ? {
+            id: access.activeTeamId,
+            name: access.activeTeam?.teamName ?? "Equipe ativa",
+          }
+        : null;
+
+  const allowedTeamIds = template.teamAccesses.map((accessItem) => accessItem.teamId);
+  const allowedTeamNames = template.teamAccesses.map((accessItem) => accessItem.team.name);
+
+  const scopeField = canCreateGlobal
     ? {
         mode: "select" as const,
         value: template.scope,
@@ -98,7 +143,7 @@ export default async function EditTemplatePage({
         helper:
           template.scope === "GLOBAL"
             ? "Alteracoes em modelo global impactam todas as equipes que usam este contrato."
-            : "Modelos privados continuam limitados a equipe dona. Para mover de equipe, troque a equipe ativa antes da edicao.",
+            : "Modelos restritos mantem a equipe dona para edicao e podem liberar uso para outras equipes especificas.",
       }
     : {
         mode: "hidden" as const,
@@ -110,7 +155,35 @@ export default async function EditTemplatePage({
         helper:
           template.scope === "GLOBAL"
             ? "Modelos globais so podem ser ajustados pelo super admin."
-            : "Este modelo permanece privado para a equipe dona.",
+            : "Este modelo permanece restrito para a equipe dona.",
+      };
+
+  const allowedTeamsField = canCreateGlobal
+    ? ownerTeamForEdit
+      ? {
+          mode: "multi-select" as const,
+          ownerTeam: {
+            id: ownerTeamForEdit.id,
+            label: ownerTeamForEdit.name,
+          },
+          options: teams
+            .filter((team) => team.id !== ownerTeamForEdit.id)
+            .map((team) => ({
+              value: team.id,
+              label: team.isActive ? team.name : `${team.name} • inativa`,
+            })),
+          helper:
+            "A equipe dona continua com edicao. Marque as equipes extras que poderao usar este modelo.",
+        }
+      : undefined
+    : {
+        mode: "hidden" as const,
+        lockedLabel: formatTemplateTeamAccessSummary(
+          allowedTeamNames.length > 0
+            ? allowedTeamNames
+            : [template.ownerTeam?.name ?? "Equipe dona"],
+        ),
+        helper: "As equipes autorizadas so podem usar o modelo; a edicao continua na equipe dona.",
       };
 
   const totalVariables = countTemplateVariables(template.variableSchema);
@@ -185,9 +258,11 @@ export default async function EditTemplatePage({
               variableSchemaInput: stringifyTemplateVariables(template.variableSchema),
               status: template.status,
               scope: template.scope,
+              allowedTeamIds,
               sourceFileName: template.sourceFileName,
               sourceStoragePath: template.sourceStoragePath,
             }}
+            allowedTeamsField={allowedTeamsField}
           />
         </section>
 
@@ -207,7 +282,11 @@ export default async function EditTemplatePage({
                 <p className="mt-2 leading-6">
                   {template.scope === "GLOBAL"
                     ? "Disponivel para todas as equipes que usam contratos globais."
-                    : `Restrito a ${template.ownerTeam?.name ?? "equipe dona"}.`}
+                    : `Disponivel para ${formatTemplateTeamAccessSummary(
+                        allowedTeamNames.length > 0
+                          ? allowedTeamNames
+                          : [template.ownerTeam?.name ?? "equipe dona"],
+                      )}.`}
                 </p>
               </div>
 

@@ -15,7 +15,11 @@ import {
   deleteTemplateSourceFile,
   persistTemplateSourceFile,
 } from "@/lib/storage/template-sources";
-import { parseTemplateVariablesInput, templateScopeLabels } from "@/lib/templates";
+import {
+  formatTemplateTeamAccessSummary,
+  parseTemplateVariablesInput,
+  templateScopeLabels,
+} from "@/lib/templates";
 import { extractTemplateBodyFromSource } from "@/lib/template-rendering";
 import { createTemplateSchema, updateTemplateSchema } from "@/lib/validation/forms";
 
@@ -37,6 +41,10 @@ function buildTemplatePayload(formData: FormData) {
     variableSchemaInput: String(formData.get("variableSchemaInput") ?? "").trim(),
     status: String(formData.get("status") ?? "DRAFT"),
     scope: String(formData.get("scope") ?? "TEAM_PRIVATE"),
+    allowedTeamIds: formData
+      .getAll("allowedTeamIds")
+      .map((value) => String(value).trim())
+      .filter(Boolean),
   };
 }
 
@@ -107,11 +115,23 @@ type TemplateScopeResolution = {
   scope: TemplateScope;
   ownerTeamId: string | null;
   ownerTeamName: string | null;
+  allowedTeams: Array<{
+    id: string;
+    name: string;
+  }>;
 };
 
-function describeTemplateScope(scope: TemplateScope, ownerTeamName?: string | null) {
+function describeTemplateScope(
+  scope: TemplateScope,
+  ownerTeamName?: string | null,
+  allowedTeamNames: string[] = [],
+) {
   if (scope === TemplateScope.GLOBAL) {
     return templateScopeLabels.GLOBAL.toLowerCase();
+  }
+
+  if (allowedTeamNames.length > 0) {
+    return `${templateScopeLabels.TEAM_PRIVATE.toLowerCase()} (${formatTemplateTeamAccessSummary(allowedTeamNames)})`;
   }
 
   return ownerTeamName
@@ -124,6 +144,7 @@ function buildTemplateDuplicateWhere(params: {
   version: number;
   scope: TemplateScope;
   ownerTeamId: string | null;
+  allowedTeamIds: string[];
   excludeTemplateId?: string;
 }) {
   const baseWhere: Prisma.ContractTemplateWhereInput =
@@ -135,9 +156,15 @@ function buildTemplateDuplicateWhere(params: {
         }
       : {
           scope: TemplateScope.TEAM_PRIVATE,
-          ownerTeamId: params.ownerTeamId,
           name: params.name,
           version: params.version,
+          teamAccesses: {
+            some: {
+              teamId: {
+                in: params.allowedTeamIds,
+              },
+            },
+          },
         };
 
   if (!params.excludeTemplateId) {
@@ -161,6 +188,7 @@ async function ensureTemplateUniqueness(params: {
   version: number;
   scope: TemplateScope;
   ownerTeamId: string | null;
+  allowedTeamIds: string[];
   excludeTemplateId?: string;
 }) {
   const existingTemplate = await prisma.contractTemplate.findFirst({
@@ -175,26 +203,13 @@ async function ensureTemplateUniqueness(params: {
   }
 }
 
-async function resolveTemplateScope(params: {
+async function resolveOwnerTeam(params: {
   actor: Awaited<ReturnType<typeof requireTemplateManageContext>>;
-  desiredScope: TemplateScope;
   currentTemplate?: {
     scope: TemplateScope;
     ownerTeamId: string | null;
   };
-}): Promise<TemplateScopeResolution> {
-  if (params.desiredScope === TemplateScope.GLOBAL) {
-    if (!canCreateGlobalTemplates(params.actor)) {
-      throw new Error("Apenas o super admin pode criar ou manter modelos globais.");
-    }
-
-    return {
-      scope: TemplateScope.GLOBAL,
-      ownerTeamId: null,
-      ownerTeamName: null,
-    };
-  }
-
+}) {
   if (
     params.actor.globalRole === "SUPER_ADMIN" &&
     params.currentTemplate?.scope === TemplateScope.TEAM_PRIVATE &&
@@ -210,22 +225,85 @@ async function resolveTemplateScope(params: {
     });
 
     if (ownerTeam) {
-      return {
-        scope: TemplateScope.TEAM_PRIVATE,
-        ownerTeamId: ownerTeam.id,
-        ownerTeamName: ownerTeam.name,
-      };
+      return ownerTeam;
     }
   }
 
   if (!params.actor.activeTeamId || !params.actor.activeTeam) {
-    throw new Error("Selecione uma equipe ativa para usar modelo privado da equipe.");
+    throw new Error("Selecione uma equipe ativa para usar um modelo restrito.");
   }
 
   return {
+    id: params.actor.activeTeamId,
+    name: params.actor.activeTeam.teamName,
+  };
+}
+
+function normalizeTeamIds(teamIds: string[]) {
+  return [...new Set(teamIds.map((teamId) => teamId.trim()).filter(Boolean))];
+}
+
+async function resolveTemplateScope(params: {
+  actor: Awaited<ReturnType<typeof requireTemplateManageContext>>;
+  desiredScope: TemplateScope;
+  selectedTeamIds: string[];
+  currentTemplate?: {
+    scope: TemplateScope;
+    ownerTeamId: string | null;
+  };
+}): Promise<TemplateScopeResolution> {
+  if (params.desiredScope === TemplateScope.GLOBAL) {
+    if (!canCreateGlobalTemplates(params.actor)) {
+      throw new Error("Apenas o super admin pode criar ou manter modelos globais.");
+    }
+
+    return {
+      scope: TemplateScope.GLOBAL,
+      ownerTeamId: null,
+      ownerTeamName: null,
+      allowedTeams: [],
+    };
+  }
+
+  const ownerTeam = await resolveOwnerTeam({
+    actor: params.actor,
+    currentTemplate: params.currentTemplate,
+  });
+
+  if (!canCreateGlobalTemplates(params.actor)) {
+    return {
+      scope: TemplateScope.TEAM_PRIVATE,
+      ownerTeamId: ownerTeam.id,
+      ownerTeamName: ownerTeam.name,
+      allowedTeams: [ownerTeam],
+    };
+  }
+
+  const candidateTeamIds = normalizeTeamIds([ownerTeam.id, ...params.selectedTeamIds]);
+  const teams = await prisma.team.findMany({
+    where: {
+      id: {
+        in: candidateTeamIds,
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+
+  if (teams.length !== candidateTeamIds.length) {
+    throw new Error("Uma ou mais equipes selecionadas nao existem mais.");
+  }
+
+  const teamsById = new Map(teams.map((team) => [team.id, team] as const));
+  const allowedTeams = candidateTeamIds.map((teamId) => teamsById.get(teamId)!);
+
+  return {
     scope: TemplateScope.TEAM_PRIVATE,
-    ownerTeamId: params.actor.activeTeamId,
-    ownerTeamName: params.actor.activeTeam.teamName,
+    ownerTeamId: ownerTeam.id,
+    ownerTeamName: ownerTeam.name,
+    allowedTeams,
   };
 }
 
@@ -253,12 +331,14 @@ export async function createTemplateAction(
     templateScope = await resolveTemplateScope({
       actor,
       desiredScope: parsed.data.scope,
+      selectedTeamIds: parsed.data.allowedTeamIds ?? [],
     });
     await ensureTemplateUniqueness({
       name: parsed.data.name,
       version: parsed.data.version,
       scope: templateScope.scope,
       ownerTeamId: templateScope.ownerTeamId,
+      allowedTeamIds: templateScope.allowedTeams.map((team) => team.id),
     });
   } catch (error) {
     return {
@@ -296,23 +376,36 @@ export async function createTemplateAction(
     | undefined;
 
   try {
-    template = await prisma.contractTemplate.create({
-      data: {
-        scope: templateScope.scope,
-        ownerTeamId: templateScope.ownerTeamId,
-        name: parsed.data.name,
-        description: parsed.data.description,
-        version: parsed.data.version,
-        body: resolvedBody,
-        variableSchema: variableResult.variableSchema,
-        status: parsed.data.status,
-      },
-      select: {
-        id: true,
-        name: true,
-        version: true,
-        sourceStoragePath: true,
-      },
+    template = await prisma.$transaction(async (tx) => {
+      const createdTemplate = await tx.contractTemplate.create({
+        data: {
+          scope: templateScope.scope,
+          ownerTeamId: templateScope.ownerTeamId,
+          name: parsed.data.name,
+          description: parsed.data.description,
+          version: parsed.data.version,
+          body: resolvedBody,
+          variableSchema: variableResult.variableSchema,
+          status: parsed.data.status,
+        },
+        select: {
+          id: true,
+          name: true,
+          version: true,
+          sourceStoragePath: true,
+        },
+      });
+
+      if (templateScope.scope === TemplateScope.TEAM_PRIVATE) {
+        await tx.contractTemplateTeamAccess.createMany({
+          data: templateScope.allowedTeams.map((team) => ({
+            templateId: createdTemplate.id,
+            teamId: team.id,
+          })),
+        });
+      }
+
+      return createdTemplate;
     });
   } catch (error) {
     return { error: getPrismaErrorMessage(error) };
@@ -353,7 +446,11 @@ export async function createTemplateAction(
   await registerUserAudit({
     actorUserId: actor.id,
     action: "TEMPLATE_CREATED",
-    description: `Modelo ${template.name} v${template.version} (${describeTemplateScope(templateScope.scope, templateScope.ownerTeamName)}) criado por ${actor.email}.`,
+    description: `Modelo ${template.name} v${template.version} (${describeTemplateScope(
+      templateScope.scope,
+      templateScope.ownerTeamName,
+      templateScope.allowedTeams.map((team) => team.name),
+    )}) criado por ${actor.email}.`,
     teamId: templateScope.ownerTeamId,
   }).catch(() => undefined);
 
@@ -421,6 +518,7 @@ export async function updateTemplateAction(
     templateScope = await resolveTemplateScope({
       actor,
       desiredScope: parsed.data.scope,
+      selectedTeamIds: parsed.data.allowedTeamIds ?? [],
       currentTemplate,
     });
     await ensureTemplateUniqueness({
@@ -428,6 +526,7 @@ export async function updateTemplateAction(
       version: parsed.data.version,
       scope: templateScope.scope,
       ownerTeamId: templateScope.ownerTeamId,
+      allowedTeamIds: templateScope.allowedTeams.map((team) => team.id),
       excludeTemplateId: templateId,
     });
   } catch (error) {
@@ -467,24 +566,43 @@ export async function updateTemplateAction(
     | undefined;
 
   try {
-    template = await prisma.contractTemplate.update({
-      where: { id: templateId },
-      data: {
-        scope: templateScope.scope,
-        ownerTeamId: templateScope.ownerTeamId,
-        name: parsed.data.name,
-        description: parsed.data.description,
-        version: parsed.data.version,
-        body: resolvedBody,
-        variableSchema: variableResult.variableSchema,
-        status: parsed.data.status,
-      },
-      select: {
-        id: true,
-        name: true,
-        version: true,
-        sourceStoragePath: true,
-      },
+    template = await prisma.$transaction(async (tx) => {
+      const updatedTemplate = await tx.contractTemplate.update({
+        where: { id: templateId },
+        data: {
+          scope: templateScope.scope,
+          ownerTeamId: templateScope.ownerTeamId,
+          name: parsed.data.name,
+          description: parsed.data.description,
+          version: parsed.data.version,
+          body: resolvedBody,
+          variableSchema: variableResult.variableSchema,
+          status: parsed.data.status,
+        },
+        select: {
+          id: true,
+          name: true,
+          version: true,
+          sourceStoragePath: true,
+        },
+      });
+
+      await tx.contractTemplateTeamAccess.deleteMany({
+        where: {
+          templateId,
+        },
+      });
+
+      if (templateScope.scope === TemplateScope.TEAM_PRIVATE) {
+        await tx.contractTemplateTeamAccess.createMany({
+          data: templateScope.allowedTeams.map((team) => ({
+            templateId,
+            teamId: team.id,
+          })),
+        });
+      }
+
+      return updatedTemplate;
     });
   } catch (error) {
     return { error: getPrismaErrorMessage(error) };
@@ -521,7 +639,11 @@ export async function updateTemplateAction(
   await registerUserAudit({
     actorUserId: actor.id,
     action: "TEMPLATE_UPDATED",
-    description: `Modelo ${template.name} v${template.version} (${describeTemplateScope(templateScope.scope, templateScope.ownerTeamName)}) atualizado por ${actor.email}.`,
+    description: `Modelo ${template.name} v${template.version} (${describeTemplateScope(
+      templateScope.scope,
+      templateScope.ownerTeamName,
+      templateScope.allowedTeams.map((team) => team.name),
+    )}) atualizado por ${actor.email}.`,
     teamId: templateScope.ownerTeamId,
   }).catch(() => undefined);
 
@@ -556,6 +678,20 @@ export async function deleteTemplateAction(
       ownerTeam: {
         select: {
           name: true,
+        },
+      },
+      teamAccesses: {
+        select: {
+          team: {
+            select: {
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          team: {
+            name: "asc",
+          },
         },
       },
       sourceStoragePath: true,
@@ -600,7 +736,11 @@ export async function deleteTemplateAction(
   await registerUserAudit({
     actorUserId: actor.id,
     action: "TEMPLATE_DELETED",
-    description: `Modelo ${template.name} v${template.version} (${describeTemplateScope(template.scope, template.ownerTeam?.name)}) apagado por ${actor.email}.`,
+    description: `Modelo ${template.name} v${template.version} (${describeTemplateScope(
+      template.scope,
+      template.ownerTeam?.name,
+      template.teamAccesses.map((access) => access.team.name),
+    )}) apagado por ${actor.email}.`,
     teamId: template.ownerTeamId,
   }).catch(() => undefined);
 

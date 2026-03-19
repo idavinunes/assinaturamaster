@@ -358,6 +358,7 @@ export const createTemplateSchema = z.object({
   variableSchemaInput: z.string().optional(),
   status: z.enum(templateStatusValues),
   scope: z.enum(templateScopeValues),
+  allowedTeamIds: z.array(z.string().cuid("Selecione equipes validas.")).optional(),
 });
 
 export const updateTemplateSchema = createTemplateSchema.extend({

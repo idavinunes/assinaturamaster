@@ -114,6 +114,7 @@ model Team {
   signedDocuments SignedDocument[]
   auditEvents AuditEvent[]
   ownedTemplates ContractTemplate[] @relation("OwnedTeamTemplates")
+  templateAccesses ContractTemplateTeamAccess[]
   ownedServiceCatalogs ServiceCatalog[] @relation("OwnedTeamServiceCatalogs")
   clientDocuments ClientDocument[]
 
@@ -202,11 +203,23 @@ model ContractTemplate {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   ownerTeam         Team?              @relation("OwnedTeamTemplates", fields: [ownerTeamId], references: [id])
+  teamAccesses      ContractTemplateTeamAccess[]
   signatureRequests SignatureRequest[]
 
   @@unique([ownerTeamId, name, version])
   @@index([scope, updatedAt])
   @@index([ownerTeamId, updatedAt])
+}
+
+model ContractTemplateTeamAccess {
+  templateId String
+  teamId     String
+  createdAt  DateTime         @default(now())
+  template   ContractTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  team       Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@id([templateId, teamId])
+  @@index([teamId])
 }
 
 model SignatureRequest {

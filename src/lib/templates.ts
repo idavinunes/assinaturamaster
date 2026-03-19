@@ -14,8 +14,24 @@ export const templateStatusLabels: Record<TemplateStatusValue, string> = {
 
 export const templateScopeLabels: Record<TemplateScopeValue, string> = {
   GLOBAL: "Global",
-  TEAM_PRIVATE: "Da equipe",
+  TEAM_PRIVATE: "Equipes selecionadas",
 };
+
+export function formatTemplateTeamAccessSummary(teamNames: string[]) {
+  if (teamNames.length === 0) {
+    return "Nenhuma equipe vinculada";
+  }
+
+  if (teamNames.length === 1) {
+    return teamNames[0];
+  }
+
+  if (teamNames.length === 2) {
+    return `${teamNames[0]} e ${teamNames[1]}`;
+  }
+
+  return `${teamNames[0]}, ${teamNames[1]} e +${teamNames.length - 2}`;
+}
 
 export type TemplateVariable = {
   group?: string;

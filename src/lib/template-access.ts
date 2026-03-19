@@ -56,7 +56,11 @@ export function buildTemplateScopeWhere(
         { scope: TemplateScope.GLOBAL },
         {
           scope: TemplateScope.TEAM_PRIVATE,
-          ownerTeamId: accessRule.teamId,
+          teamAccesses: {
+            some: {
+              teamId: accessRule.teamId,
+            },
+          },
         },
       ],
     };

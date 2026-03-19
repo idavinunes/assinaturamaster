@@ -3,6 +3,7 @@ import { TemplateForm } from "@/components/template-form";
 import { redirect } from "next/navigation";
 import { FolderCode, Globe2, Shapes, ShieldCheck } from "lucide-react";
 import { requireAccessContext } from "@/lib/access-control";
+import { prisma } from "@/lib/prisma";
 import {
   canCreateGlobalTemplates,
   canManageTemplates,
@@ -21,30 +22,69 @@ export default async function NewTemplatePage({ searchParams }: NewTemplatePageP
   const access = await requireAccessContext();
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const error = resolvedSearchParams?.error;
+  const canCreateGlobal = canCreateGlobalTemplates(access);
 
   if (!canManageTemplates(access)) {
     redirect("/painel/modelos");
   }
 
-  const scopeField = canCreateGlobalTemplates(access)
+  const teams = canCreateGlobal
+    ? await prisma.team.findMany({
+        orderBy: [{ name: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          isActive: true,
+        },
+      })
+    : [];
+
+  const scopeField = canCreateGlobal
     ? {
         mode: "select" as const,
         value: access.activeTeamId ? ("TEAM_PRIVATE" as const) : ("GLOBAL" as const),
         options: access.activeTeamId
           ? [
-              { value: "TEAM_PRIVATE" as const, label: `${templateScopeLabels.TEAM_PRIVATE} (${access.activeTeam?.teamName})` },
+              {
+                value: "TEAM_PRIVATE" as const,
+                label: `${templateScopeLabels.TEAM_PRIVATE} (${access.activeTeam?.teamName})`,
+              },
               { value: "GLOBAL" as const, label: templateScopeLabels.GLOBAL },
             ]
           : [{ value: "GLOBAL" as const, label: templateScopeLabels.GLOBAL }],
         helper: access.activeTeamId
-          ? "Modelos privados ficam restritos a equipe ativa. Somente o super admin pode publicar um modelo global."
+          ? "Modelos restritos usam a equipe ativa como dona. O super admin pode compartilhar com equipes especificas ou publicar globalmente."
           : "Sem equipe ativa, o cadastro fica limitado ao escopo global.",
       }
     : {
         mode: "hidden" as const,
         value: "TEAM_PRIVATE" as const,
         lockedLabel: `${templateScopeLabels.TEAM_PRIVATE} (${access.activeTeam?.teamName ?? "equipe ativa"})`,
-        helper: "O modelo novo nasce privado e fica disponivel apenas para a equipe ativa.",
+        helper: "O modelo novo nasce restrito e fica disponivel apenas para a equipe ativa.",
+      };
+
+  const allowedTeamsField = canCreateGlobal
+    ? access.activeTeamId
+      ? {
+          mode: "multi-select" as const,
+          ownerTeam: {
+            id: access.activeTeamId,
+            label: access.activeTeam?.teamName ?? "Equipe ativa",
+          },
+          options: teams
+            .filter((team) => team.id !== access.activeTeamId)
+            .map((team) => ({
+              value: team.id,
+              label: team.isActive ? team.name : `${team.name} • inativa`,
+            })),
+          helper:
+            "Selecione as equipes extras que poderao usar este modelo. A equipe dona continua sendo a equipe ativa.",
+        }
+      : undefined
+    : {
+        mode: "hidden" as const,
+        lockedLabel: access.activeTeam?.teamName ?? "Equipe ativa",
+        helper: "Somente a equipe ativa podera usar este modelo.",
       };
 
   return (
@@ -79,7 +119,13 @@ export default async function NewTemplatePage({ searchParams }: NewTemplatePageP
             pendingLabel="Criando..."
             error={error}
             scopeField={scopeField}
-            defaults={{ version: 1, status: "DRAFT", scope: scopeField.value }}
+            allowedTeamsField={allowedTeamsField}
+            defaults={{
+              version: 1,
+              status: "DRAFT",
+              scope: scopeField.value,
+              allowedTeamIds: access.activeTeamId ? [access.activeTeamId] : [],
+            }}
           />
         </section>
 
@@ -95,7 +141,7 @@ export default async function NewTemplatePage({ searchParams }: NewTemplatePageP
                     <Shapes className="size-4 text-accent" />
                   )}
                   <p className="font-semibold">
-                    {scopeField.value === "GLOBAL" ? "Modelo global" : "Modelo da equipe"}
+                    {scopeField.value === "GLOBAL" ? "Modelo global" : "Modelo restrito"}
                   </p>
                 </div>
                 <p className="mt-2">{scopeField.helper}</p>
@@ -119,8 +165,8 @@ export default async function NewTemplatePage({ searchParams }: NewTemplatePageP
               <p className="font-semibold">Regra aplicada</p>
             </div>
             <p className="mt-2">
-              Modelos globais impactam todas as equipes. Modelos privados seguem a
-              equipe ativa e herdam o escopo operacional do ambiente atual.
+              Modelos globais impactam todas as equipes. Modelos restritos usam uma
+              equipe dona e podem ficar disponiveis so para as equipes escolhidas.
             </p>
           </section>
         </aside>
