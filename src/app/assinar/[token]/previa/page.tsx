@@ -1,14 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink } from "lucide-react";
 import { AppBrand } from "@/components/app-brand";
 import { getResolvedBrandingSettings } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
-import {
-  buildPublicSignaturePath,
-  buildPublicSignedDocumentPath,
-} from "@/lib/signature-requests";
+import { buildPublicSignaturePath } from "@/lib/signature-requests";
 import {
   buildSignatureRequestTemplateValues,
   renderTemplateDocument,
@@ -29,6 +25,7 @@ export async function generateMetadata({
     select: {
       teamId: true,
       title: true,
+      status: true,
     },
   });
 
@@ -39,7 +36,10 @@ export async function generateMetadata({
   const branding = await getResolvedBrandingSettings(request.teamId);
 
   return {
-    title: `Previa de ${request.title} • ${branding.browserTitle}`,
+    title:
+      request.status === "SIGNED"
+        ? `Link encerrado • ${branding.browserTitle}`
+        : `Previa de ${request.title} • ${branding.browserTitle}`,
     description: branding.browserDescription,
   };
 }
@@ -104,6 +104,28 @@ export default async function PublicSignaturePreviewPage({
   }
 
   const branding = await getResolvedBrandingSettings(request.teamId);
+
+  if (request.status === "SIGNED") {
+    return (
+      <main className="mx-auto max-w-5xl px-4 py-8 md:px-6 md:py-10">
+        <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:p-7">
+          <AppBrand href="/" branding={branding} />
+
+          <div className="mt-8 rounded-[28px] border border-slate-200 bg-slate-50 px-5 py-8 text-center md:px-8">
+            <p className="eyebrow text-slate-400">Link encerrado</p>
+            <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
+              Assinatura concluida
+            </h1>
+            <p className="mt-4 text-sm leading-7 text-slate-500">
+              A previa publica foi encerrada apos a assinatura e nao pode mais ser
+              acessada por este link.
+            </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   const renderedContract = await renderTemplateDocument({
     template: request.template,
     values: buildSignatureRequestTemplateValues({
@@ -127,11 +149,6 @@ export default async function PublicSignaturePreviewPage({
         : null,
     }),
   });
-
-  const signedDocumentUrl =
-    request.status === "SIGNED" && request.signedDocument
-      ? buildPublicSignedDocumentPath(request.publicToken)
-      : null;
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 md:px-6 md:py-10">
@@ -165,12 +182,6 @@ export default async function PublicSignaturePreviewPage({
             >
               Voltar para assinatura
             </Link>
-            {signedDocumentUrl ? (
-              <Link href={signedDocumentUrl} target="_blank" className="button-primary">
-                <ExternalLink className="size-4" />
-                Ver PDF assinado
-              </Link>
-            ) : null}
           </div>
         </div>
 

@@ -6,7 +6,6 @@ import { PublicSignatureEvidencePanel } from "@/components/public-signature-evid
 import { getResolvedBrandingSettings } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 import {
-  buildPublicSignedDocumentPath,
   buildPublicSignaturePreviewPath,
   buildPublicSignatureDrawnSignaturePath,
   buildPublicSignatureSelfiePath,
@@ -28,6 +27,7 @@ export async function generateMetadata({
     select: {
       teamId: true,
       title: true,
+      status: true,
     },
   });
 
@@ -38,7 +38,10 @@ export async function generateMetadata({
   const branding = await getResolvedBrandingSettings(request.teamId);
 
   return {
-    title: `${request.title} • ${branding.browserTitle}`,
+    title:
+      request.status === "SIGNED"
+        ? `Link encerrado • ${branding.browserTitle}`
+        : `${request.title} • ${branding.browserTitle}`,
     description: branding.browserDescription,
   };
 }
@@ -109,11 +112,30 @@ export default async function PublicSignaturePage({
   }
 
   const branding = await getResolvedBrandingSettings(request.teamId);
+
+  if (request.status === "SIGNED") {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-8 md:px-6 md:py-10">
+        <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:p-7">
+          <AppBrand href="/" branding={branding} />
+
+          <div className="mt-8 rounded-[28px] border border-slate-200 bg-slate-50 px-5 py-8 text-center md:px-8">
+            <p className="eyebrow text-slate-400">Link encerrado</p>
+            <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
+              Assinatura concluida
+            </h1>
+            <p className="mt-4 text-sm leading-7 text-slate-500">
+              Este link publico foi encerrado apos a assinatura e nao pode mais ser
+              reutilizado. Se precisar do contrato final, solicite o envio direto para a
+              equipe responsavel.
+            </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   const previewUrl = buildPublicSignaturePreviewPath(request.publicToken);
-  const signedDocumentUrl =
-    request.status === "SIGNED" && request.signedDocument
-      ? buildPublicSignedDocumentPath(request.publicToken)
-      : null;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 md:px-6 md:py-10">
@@ -129,16 +151,14 @@ export default async function PublicSignaturePage({
           {request.title}
         </h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
-          {request.status === "SIGNED"
-            ? "Este link esta em modo consulta. O documento ja foi assinado e o PDF final segue disponivel."
-            : "Siga as etapas para validar sua identidade e concluir a assinatura deste documento."}
+          Siga as etapas para validar sua identidade e concluir a assinatura deste
+          documento.
         </p>
 
         <div className="mt-6 flex flex-wrap gap-3">
           <span
             className={clsx(
               "inline-flex rounded-full px-3 py-1 text-xs font-medium",
-              request.status === "SIGNED" && "bg-emerald-50 text-emerald-700",
               request.status === "OPENED" && "bg-sky-50 text-sky-700",
               request.status === "SENT" && "bg-amber-50 text-amber-700",
               request.status === "DRAFT" && "bg-slate-100 text-slate-700",
@@ -180,7 +200,7 @@ export default async function PublicSignaturePage({
             requestTitle={request.title}
             requestStatus={request.status}
             previewUrl={previewUrl}
-            signedDocumentUrl={signedDocumentUrl}
+            signedDocumentUrl={null}
             captureDisabled={
               request.status === "EXPIRED" ||
               request.status === "CANCELED"
